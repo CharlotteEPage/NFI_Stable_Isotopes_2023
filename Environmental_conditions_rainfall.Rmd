@@ -1,0 +1,186 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+# Environmental dataset 
+
+Rainfall
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(tidyverse)
+library(lubridate) 
+library(openair)
+
+rain <- read.csv("Rainfall_02_2022.csv")
+
+historical_rain <- read.csv("Historical_rainfall.csv")
+
+```
+
+```{r}
+
+str(rain)
+
+rain$col3 <- paste(rain$Day, rain$Month, sep="/")
+rain$Date <- paste(rain$col3, rain$Year, sep="/")
+
+rain$Date <- dmy(rain$Date)
+
+rainplot <- rain %>% filter(Date >= as.Date("2020-07-01") & Date <= as.Date("2021-04-15"))
+
+r <- ggplot(rainplot, aes(Date,Rainfall)) +
+  geom_col()+
+  scale_y_continuous(limits = c(0,125)) +
+  scale_x_date(date_breaks = "months" , date_labels = "%b-%y") +
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  theme_bw()
+  
+  r
+
+```
+
+
+5 day
+1 month 
+3 month rainfall 
+
+Sampling time point dates 
+
+2/09/20 (water) (5-day: 28/08/20 - 2/09/20, 1-month: 2/08/20-2/09/20, 3-month: 2/06/20-2/09/20)
+15/11/20 (water) (5-day: 10/11/20 - 15/11/20, 1-mont)
+10/12/20 (water and macroalgae - 5-day: 5/12/20)
+9/04/21 (water and macroalgae - 5-day: 4/04/21)
+
+5-day
+```{r}
+
+# September 
+
+sept_fiveday <- rain %>% filter(Date >= as.Date("2020-08-28") & Date <= as.Date("2020-09-02"))
+sum(sept_fiveday$Rainfall)
+sept_month <- rain %>% filter(Date >= as.Date("2020-08-02") & Date <= as.Date("2020-09-02"))
+sept_threemonth <- rain %>% filter(Date >= as.Date("2020-06-02") & Date <= as.Date("2020-09-02"))
+
+# November 
+
+nov_fiveday <- rain %>% filter(Date >= as.Date("2020-11-10") & Date <= as.Date("2020-11-15"))
+sum(nov_fiveday$Rainfall)
+nov_month <- rain %>% filter(Date >= as.Date("2020-10-15") & Date <= as.Date("2020-11-15"))
+nov_threemonth <- rain %>% filter(Date >= as.Date("2020-08-15") & Date <= as.Date("2020-11-15"))
+
+# December 
+
+dec_fiveday <- rain %>% filter(Date >= as.Date("2020-12-05") & Date <= as.Date("2020-12-10"))
+sum(dec_fiveday$Rainfall)
+dec_month <- rain %>% filter(Date >= as.Date("2020-11-10") & Date <= as.Date("2020-12-10"))
+dec_threemonth <- rain %>% filter(Date >= as.Date("2020-09-10") & Date <= as.Date("2020-12-10"))
+
+# April
+
+april_fiveday <- rain %>% filter(Date >= as.Date("2020-04-04") & Date <= as.Date("2020-04-09"))
+sum(april_fiveday$Rainfall)
+april_month <- rain %>% filter(Date >= as.Date("2020-03-09") & Date <= as.Date("2020-04-09"))
+april_threemonth <- rain %>% filter(Date >= as.Date("2020-01-09") & Date <= as.Date("2020-04-09"))
+
+```
+
+```{r}
+# September 
+
+sum(sept_fiveday$Rainfall)
+
+```
+
+Historical rainfall 
+
+10 years 
+
+August 2010 - April 2021
+
+```{r}
+
+historical_rain
+
+str(rain)
+
+historical_rain$col3 <- paste(historical_rain$Day, historical_rain$Month, sep="/")
+historical_rain$Date <- paste(historical_rain$col3, historical_rain$Year, sep="/")
+
+historical_rain$Date <- dmy(historical_rain$Date)
+
+historical_rainplot <- historical_rain %>% filter(Date >= as.Date("2000-01-01") & Date <= as.Date("2021-04-15"))
+
+r_plot <- ggplot(historical_rainplot, aes(Date,Rainfall.amount..millimetres.)) +
+  geom_col()+
+  scale_y_continuous(limits = c(0,150)) +
+  scale_x_date(date_breaks = "months" , date_labels = "%b-%y") +
+  theme_bw()
+  
+  r_plot
+
+```
+
+
+Calculate average yearly rainfall 
+
+```{r}
+
+histo_rainfall <- select(historical_rainplot, Date,Rainfall.amount..millimetres.,Year )
+
+str(histo_rainfall)
+
+histo_rainfall$Year <- as.factor(histo_rainfall$Year)
+
+max_year <- histo_rainfall %>% group_by(Year) %>% 
+ summarise(max_day = max(Rainfall.amount..millimetres., na.rm = T))
+
+histo_rainfall$date <- histo_rainfall$Date
+
+
+raintimeave_year <- timeAverage(histo_rainfall, 
+                        avg.time = "year",
+                        data.thresh = 0,
+                        statistic = "mean",
+                        #start.date = "2020-12-03 16:00:00",
+                        fill = TRUE)
+str(raintimeave_year)
+
+raintimeave_year$date <- ymd(raintimeave_year$date)
+
+ten_year_plot <- ggplot(raintimeave_year, aes(date, Rainfall.amount..millimetres.)) +
+  geom_col()+
+  scale_y_continuous(limits = c(0,5)) +
+  scale_x_date(date_breaks = "years" , date_labels = "%Y") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+ geom_hline(yintercept = 2.9843, color="black", linetype="dashed")
+
+ten_year_plot
+
+# Calculate yearly average 
+
+summarise(raintimeave_year, mean = mean(Rainfall.amount..millimetres.))
+
+```
+
+Calculate the yearly total rainfall 
+
+```{r}
+
+sum_year <- histo_rainfall %>% group_by(Year) %>% 
+ summarise(total_rainfall = sum(Rainfall.amount..millimetres., na.rm = T))
+
+histo_rainfall$date <- histo_rainfall$Date
+
+
+sum_year_plot <- ggplot(sum_year, aes(Year,total_rainfall)) +
+  geom_col()+
+  #scale_y_continuous(limits = c(0,5)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))# +
+ #geom_hline(yintercept = 2.9843, color="black", linetype="dashed")
+sum_year_plot
+```
