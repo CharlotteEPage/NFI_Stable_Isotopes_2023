@@ -5,7 +5,9 @@ output: html_notebook
 
 # Environmental dataset 
 
-Rainfall
+# --------------
+# NFI_rain_data
+# --------------
 
 ```{r}
 library(ggplot2)
@@ -14,7 +16,7 @@ library(tidyverse)
 library(lubridate) 
 library(openair)
 
-rain <- read.csv("Rainfall_02_2022.csv")
+rain <- read.csv("Rainfall_02:2022.csv")
 
 historical_rain <- read.csv("Historical_rainfall.csv")
 

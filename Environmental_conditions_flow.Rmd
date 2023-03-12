@@ -1,0 +1,218 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+# Environmental dataset 
+
+# -------------------
+# NFI_flow_conditions
+# -------------------
+
+# Plotting flow 
+# Plotting tide 
+# Plotting wind
+
+Libraries 
+```{r}
+library(zoo)
+library(xts)
+library(Hmisc)
+library(lubridate)
+library(plyr)
+library(lattice)
+library(openair)
+library(pastecs)
+library(tidyr)
+library(dplyr)
+library(tibbletime)
+library(lubridate)
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(Hmisc)
+library(mgcv)
+library(scales)
+library(ggthemes)
+library(ggrepel) # for annotations 
+library(viridis) # for color blind friendly colours 
+library(ggdist) # for half violin plots
+library(patchwork) # for pasting plots together
+
+```
+
+
+Read in files 
+
+```{r}
+
+# NFI lagoon flow data (previously tidied)
+
+lagoon_flow <- read.csv("Lagoon_flow_conditions.csv")
+
+# Tide and wind data 
+
+tide <- read.csv("Tide_NFI.csv")
+BOM <- read.csv("BOM_2020-2021.csv")
+
+```
+
+
+Parse columns
+
+```{r}
+
+str(lagoon_flow)
+
+# Parse time column
+lagoon_flow$datetime <- ymd_hms(lagoon_flow$datetime)
+
+```
+
+
+
+```{r}
+lagoon_flow$date <- lagoon_flow$datetime
+
+avg_lagoon_flow <- timeAverage(lagoon_flow, 
+                      avg.time = "3 hour",
+                      type = "Log")
+
+timePlot(avg_lagoon_flow, pollutant = c("speed"), type = "Log")
+
+# Reorder variable 
+avg_lagoon_flow$Log <- ordered(avg_lagoon_flow$Log, levels = c("SB1", "SB2", "SB3","SB4","EB1","EB2"))
+
+
+ggplot(avg_lagoon_flow, aes(datetime,speed)) +
+  geom_line(aes(col = Log)) +
+  scale_x_datetime(labels = date_format("%d.%m"), breaks = seq(as.POSIXct("2020-12-07 00:59:00 CET"),
+                 as.POSIXct("2021-1-17 00:59:00 CET"), "1 day")) +
+  facet_grid(rows = vars(Log)) +
+   scale_fill_manual(values = c("#EBB261","#E47250","#DF1130","#AF1A11","#5A4A6F", "#9D5A6C")) + # Specify     colours using hex codes.
+    scale_colour_manual(values = c("#EBB261","#E47250","#DF1130","#AF1A11","#5A4A6F", "#9D5A6C")) + # Specify colours using hex codes.
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+# Calculate daily median, minimum, maximum speed, SD 
+
+# Median
+avg_lagoon_flow_daily_median <- timeAverage(lagoon_flow, 
+                      avg.time = "day",
+                      statistic = "median",
+                      type = "Log")
+
+daily_median_flows <- avg_lagoon_flow_daily_median %>% group_by(Log) %>%
+  summarise(mean_median = mean(speed))
+
+# Max
+avg_lagoon_flow_daily_max <- timeAverage(lagoon_flow, 
+                      avg.time = "day",
+                      statistic = "max",
+                      type = "Log")
+
+daily_max_flows <- avg_lagoon_flow_daily_max %>% group_by(Log) %>%
+  summarise(mean_max = mean(speed))
+
+# Min
+avg_lagoon_flow_daily_min <- timeAverage(lagoon_flow, 
+                      avg.time = "day",
+                      statistic = "min",
+                      type = "Log")
+
+daily_min_flows <- avg_lagoon_flow_daily_min %>% group_by(Log) %>%
+  summarise(mean_min = mean(speed))
+
+# SD
+avg_lagoon_flow_daily_sd <- timeAverage(lagoon_flow, 
+                      avg.time = "day",
+                      statistic = "sd",
+                      type = "Log")
+
+daily_sd_flows <- avg_lagoon_flow_daily_sd %>% group_by(Log) %>%
+  summarise(mean_sd = mean(speed))
+
+```
+```{r}
+# Histograms for speeds
+
+ggplot(avg_lagoon_flow, aes(speed)) + 
+  geom_histogram(aes(fill = Log)) +
+  facet_wrap(~Log) +
+  scale_fill_manual(values = c("#EBB261","#E47250","#DF1130","#AF1A11","#5A4A6F", "#9D5A6C")) + # Specify     colours using hex codes.
+  scale_colour_manual(values = c("#EBB261","#E47250","#DF1130","#AF1A11","#5A4A6F", "#9D5A6C")) + # Specify colours using hex codes.
+  theme_bw()
+
+```
+
+```{r}
+
+# Wind direction and frequency
+
+windRose(avg_lagoon_flow,type ="Log", ws = "speed", wd = "dir", width = 1.5, paddle = F, col = rev(rocket(6)),key.position = "right",angle = 30)
+
+```
+
+```{r}
+
+tide$Date <- as.Date(tide$Date, format = "%d/%m/%y")
+tide$timepoint <- paste(tide$Date, "_", tide$Time)
+tide$timepoint <- ymd_hm(tide$timepoint)
+str(tide)
+
+# Filter for time during which current meters are recording
+
+tide <- subset(tide, Date >= as.Date("2020-12-07"))
+tide <- subset(tide, Date <= as.Date("2021-01-17"))
+
+a <- ggplot(tide, aes(timepoint,Tide_height)) +
+  geom_point() +
+  scale_x_datetime(labels = date_format("%m-%d %H"), breaks = seq(as.POSIXct("2020-12-07 00:59:00 CET"),
+                 as.POSIXct("2021-1-17 00:59:00 CET"), "24 hours")) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+a
+
+spline_int <- as.data.frame(spline(tide$timepoint, tide$Tide_height))
+
+p <-ggplot() + 
+  geom_line(data = spline_int, aes(x = x, y = y)) +
+  theme_classic() +
+  theme_bw()
+
+p
+
+
+```
+
+```{r}
+# Plot wind 
+str(BOM)
+
+BOM_wind <- select(BOM, Date, X9am_wind_spd, X3pm_wind_speed)
+
+BOM_wind$Date <- as.Date(BOM_wind$Date, format = "%d/%m/%y")
+
+str(BOM_wind)
+
+BOM_wind$X3pm_wind_speed <- as.numeric(BOM_wind$X3pm_wind_speed)
+  
+# Filter out dates for flow 
+
+BOM_wind <- subset(BOM_wind, Date >= as.Date("2020-12-07"))
+BOM_wind <- subset(BOM_wind, Date <= as.Date("2021-01-17"))
+
+ggplot(BOM_wind) +
+  geom_point(aes(Date,X9am_wind_spd)) +
+  geom_point(aes(Date,X3pm_wind_speed)) +
+  theme_bw()
+
+ggplot(BOM_wind) +
+  geom_point(aes(Date,X9am_wind_spd)) +
+  geom_point(aes(Date,X3pm_wind_speed)) +
+  scale_x_date(labels = date_format("%d-%m"), date_breaks = "1 day") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+```
