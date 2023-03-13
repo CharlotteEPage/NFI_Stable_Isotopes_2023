@@ -102,7 +102,11 @@ avg_lagoon_flow_daily_median <- timeAverage(lagoon_flow,
                       statistic = "median",
                       type = "Log")
 
-daily_median_flows <- avg_lagoon_flow_daily_median %>% group_by(Log) %>%
+
+
+
+daily_median_flows <- avg_lagoon_flow_daily_median %>% 
+  group_by(Log)%>%
   summarise(mean_median = mean(speed))
 
 # Max
