@@ -1,0 +1,648 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+# --------------------
+# NFI_Stable_isotopes
+# --------------------
+
+This script runs analysis on stable isotope data from Macroalgae samples collected at sites around Norfolk Island. 
+
+Sites:
+Lagoon (Emily Bay and Slaughter Bay) - EB and SB
+Cemetery Bay (CB)
+The Cord (TC)
+
+Time points of sample collection:
+Dec 2020 
+April 2021 
+
+NB: Samples collected in December '20 were collected as a composite sample (i.e. n = 3 per sample). In April '21 samples were collected n = 6 and analysed separately. This script begins by analysing the variance present within the samples to justify use of the composite sample. This design does however limit the statistical analysis that an be completed.
+
+A sample from the Cord (the control site) was not sampled in December 2020 due to inaccessible weather conditions.
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(multcomp)
+library(patchwork)
+library(lmerTest)
+library(emmeans)
+library(plotrix)
+library(DHARMa)
+library(jtools)
+library(sjPlot)
+library(sjmisc)
+library(sjlabelled)
+
+StableIsotope <- read.csv(file= "SI_comp.csv", header = TRUE)
+
+View(StableIsotope)
+str(StableIsotope)
+
+# Create a new variable for assessment below
+StableIsotope <- StableIsotope %>% mutate(CNratio = C_ug/N_ug)
+```
+
+
+# Analysis of variation present in samples April 2021
+
+
+April data set 
+
+
+```{r}
+
+AprilSI.lagoon.sites <- StableIsotope %>%
+  filter(Date == "4/4/21") %>% 
+  slice(-c(49:60)) %>% # Slice out the single point sites within the lagoon
+  dplyr::select(Actual_ID,C_.,N_.,C13,N15,CNratio)
+
+# Make Actual_ID a factor
+AprilSI.lagoon.sites$Actual_ID <- as.factor(AprilSI.lagoon.sites$Actual_ID)
+
+# Time to PIVOT
+AprilSI.var.long <- pivot_longer(AprilSI.lagoon.sites,cols = 2:6, values_to = "Value")
+ 
+AprilSI.var.long$name <- as.factor(AprilSI.var.long$name)
+
+str(AprilSI.var.long)
+
+# Find the SD per sample site 
+# Below piece of code keeps throwing NAs - need to fix this ####
+AprilSI.sd <- AprilSI.var.long %>% group_by(Actual_ID,name) %>%
+  summarise(mean = mean(Value, na.rm = TRUE),
+            stdev = sd(Value, na.rm = TRUE))
+
+AprilSI.sd.summed <- AprilSI.sd %>% group_by(name) %>%
+  summarise(SD_SD = mean(stdev),
+            n = n(),
+            se = sd(stdev)/sqrt(n))
+
+# Plot
+
+var_plot <- ggplot(AprilSI.sd.summed, aes(name, SD_SD)) +
+  geom_bar(fill = "skyblue", stat = "identity") + 
+  geom_errorbar(aes(ymin=SD_SD-se, ymax=SD_SD+se), width=0.2, alpha=0.9) +
+  theme_bw()
+
+
+```
+
+
+# Analysis 
+
+ANOVA to test for differences in stable isotope values between sites. 
+
+# NOTE: Mixed effects modelling with lagoon (EB and SB) as a random factor led to model convergence in most cases.
+
+This structure of modelling was therefore not carried through the rest of analysis.
+
+December 20
+
+```{r}
+
+DecSI <- StableIsotope %>%
+  filter(Date == "6/12/20") %>% filter(Site %in% c("Coord","EB","SB"))
+
+Control <- StableIsotope %>%
+  filter(Date == "4/4/21") %>% filter(Site %in% c("Coord"))
+
+DecSI.analysis <- rbind(DecSI,Control)
+
+# We want to filter out cemetery here (can't use for analysis with only one replicate) but also compare samples to the coord from April 2021
+
+```
+
+Differences between sites 
+
+# Organise data sets to be analysing 
+
+```{r}
+
+DecSI.analysis$Site <- as.factor(DecSI.analysis$Site)
+DecSI.analysis$Site_1 <- as.factor(DecSI.analysis$Site_1)
+
+View(DecSI.analysis)
+
+AprilSI <- StableIsotope %>%
+  filter(Date == "4/4/21") 
+#write.csv(AprilSI, "April_SI_mapping.csv")
+  
+str(AprilSI)
+
+AprilSI$Site <- as.factor(AprilSI$Site)
+AprilSI$Site_1 <- as.factor(AprilSI$Site_1)
+View(AprilSI)
+
+```
+
+
+```{r}
+# N15 
+
+# December 2020 
+# mod <- lmer(N15 ~ Site + (1|Site_1), DecSI.analysis)
+
+mod <- lm(N15 ~ Site, DecSI.analysis)
+
+plot(mod)
+
+#simulationOutput <- simulateResiduals(fittedModel = mod, plot = F)
+#plot(simulationOutput)
+
+summary(mod)
+
+anova(mod)
+
+tab_model(mod)
+
+#Ndec <- emmeans(mod, specs = ~ Site)
+#pairs(Ndec, adjust = "bonf")
+
+# April 2021 
+#mod1 <- lmer(sqrt(N15) ~ Site + (1|Site_1), AprilSI)
+#simulationOutput <- simulateResiduals(fittedModel = mod1, plot = F)
+#plot(simulationOutput)
+
+mod1 <- lm((N15) ~ Site, AprilSI)
+plot(mod1)
+
+summary(mod1)
+
+anova(mod1)
+
+tab_model(mod1)
+
+emmeans(mod1, list(pairwise ~ Site), adjust = "bonf")
+
+```
+
+```{r}
+# %N
+
+#mod1 <- lmer(N_. ~ Site + (1|Site_1), DecSI.analysis)
+
+#simulationOutput <- simulateResiduals(fittedModel = mod1, plot = F)
+#plot(simulationOutput)
+
+mod2 <- lm(N_. ~ Site, DecSI.analysis)
+plot(mod2)
+summary(mod2)
+
+anova(mod2)
+
+tab_model(mod2)
+
+emmeans(mod2, list(pairwise ~ Site), adjust = "bonf")
+
+#Ndec <- emmeans(mod, specs = ~ Site)
+#pairs(Ndec, adjust = "bonf")
+
+# April 2021 
+#mod3 <- lmer(log(N_.) ~ Site + (1|Site_1), AprilSI)
+#simulationOutput <- simulateResiduals(fittedModel = mod4, plot = F)
+#plot(simulationOutput)
+
+mod3 <- lm(N_. ~ Site, AprilSI)
+plot(mod3)
+
+summary(mod3)
+
+anova(mod3)
+
+tab_model(mod3)
+
+emmeans(mod3, list(pairwise ~ Site), adjust = "bonf")
+
+```
+
+
+```{r}
+# C13
+
+# December 2020 
+
+mod4 <- lm(C13 ~ Site, DecSI.analysis)
+plot(mod4)  
+
+summary(mod4)
+anova(mod4)
+
+
+tab_model(mod4)
+
+emmeans(mod4, list(pairwise ~ Site), adjust = "bonf")
+
+#CDec<- emmeans(mod7, specs = ~ Site)
+#pairs(CDec, adjust = "bonf")
+
+# April 2021
+
+mod5 <- lm(C13 ~ Site, AprilSI)
+plot(mod5)  
+
+summary(mod5)
+anova(mod5)
+
+
+tab_model(mod5)
+
+emmeans(mod5, list(pairwise ~ Site), adjust = "bonf")
+
+
+
+```
+
+```{r}
+# C:N
+
+# December 2020 
+mod6 <- lm((CNratio) ~ Site, DecSI.analysis)
+
+plot(mod6) 
+
+summary(mod6)
+anova(mod6)
+
+
+tab_model(mod6)
+
+emmeans(mod6, list(pairwise ~ Site), adjust = "bonf")
+
+#kruskal.test(N15 ~ Site, data = DecSI.analysis)
+
+#pairwise.wilcox.test(DecSI.analysis$N15, DecSI.analysis$Site,
+  #               p.adjust.method = "bonferroni")
+
+# April 2021
+
+mod7 <- lm((CNratio) ~ Site,AprilSI)
+
+plot(mod7) 
+
+summary(mod7)
+anova(mod7)
+
+
+tab_model(mod7)
+
+emmeans(mod7, list(pairwise ~ Site), adjust = "bonf")
+
+
+
+```
+April 21
+
+```{r}
+AprilSI <- StableIsotope %>%
+  filter(Date == "4/4/21") 
+#write.csv(AprilSI, "April_SI_mapping.csv")
+  
+str(AprilSI)
+```
+Differences between sites 
+```{r}
+
+AprilSI$Site <- as.factor(AprilSI$Site)
+
+View(AprilSI)
+# N15
+
+kruskal.test(N15 ~ Site, data = AprilSI)
+
+pairwise.wilcox.test(AprilSI$N15, AprilSI$Site,
+                 p.adjust.method = "BH")
+
+# N%
+
+mod1 <- lm(N_. ~ Site, data = AprilSI)
+plot(mod1) # Does not violate assumptions
+summary(mod1)
+anova(mod1)
+
+em1 <- emmeans(mod1, specs = ~ Site)
+pairs(em1, adjust = "bonf")
+
+# C13
+
+mod2 <- lm(C13 ~ Site, data = AprilSI)
+
+plot(mod2) # Point 13 seems to be an outlier - remove this?
+AprilSI.sliced <- AprilSI %>% slice(-c(13))
+
+mod3 <- lm(C13 ~ Site, data = AprilSI.sliced)
+plot(mod3)
+summary(mod3)
+anova(mod3)
+
+em2 <- emmeans(mod3, specs = ~ Site)
+pairs(em2, adjust = "bonf")
+
+```
+
+# Differences between sites (looking within EB and SB)
+
+```{r}
+str(AprilSI.lagoon.sites)
+
+AprilSI.lagoon.sites <- AprilSI.lagoon.sites %>%slice(-c(49,50))
+  
+# N15
+mod8 <- lm(N15 ~ Actual_ID, data = AprilSI.lagoon.sites)
+plot(mod8)
+summary(mod8)
+
+emlagoonN15 <- emmeans(mod8, specs = ~ Actual_ID)
+pairs(emlagoonN15, adjust = "bonf")
+
+# %N
+
+mod9 <- lm(N_. ~ Actual_ID, data = AprilSI.lagoon.sites)
+plot(mod9)
+summary(mod9)
+
+emlagoonN <- emmeans(mod9, specs = ~ Actual_ID)
+pairs(emlagoonN, adjust = "bonf")
+
+
+# C13
+
+mod10 <- lm(C13 ~ Actual_ID, data = AprilSI.lagoon.sites)
+plot(mod10)
+summary(mod10)
+
+emlagoonC13 <- emmeans(mod10, specs = ~ Actual_ID)
+pairs(emlagoonC13, adjust = "bonf")
+
+
+```
+
+# Plotting 
+
+N15 
+
+```{r}
+
+
+# December 2020 data wrangle
+
+str(DecSI)
+
+DecSI.plot <- StableIsotope %>%
+  filter(Date == "6/12/20")
+Control <- StableIsotope %>%
+  filter(Date == "4/4/21") %>% filter(Site %in% c("Coord"))
+
+DecSI.plotting <- rbind(DecSI.plot,Control)
+
+DecSI.plotting$Site <- as.factor(DecSI.plotting$Site)
+
+
+DecSI.plotting$Site <- factor(DecSI.plotting$Site, levels = c("Coord","Cem","SB","EB"))
+
+Colours_dec <-c("#008000","#4D828F","#AF1A11","#5D2D89")
+
+# N15
+
+Dec2020N15 <- DecSI.plotting %>% group_by(Site) %>%
+  summarise(mean = mean(N15, na.rm = TRUE),
+            sd = sd(N15, na.rm = TRUE),
+            n = sum(!is.na(N15)),
+            se = sd/sqrt(n))
+
+
+p <- ggplot(Dec2020N15, aes(x=Site, y=mean, colour=Site, group=Site)) + 
+    geom_errorbar(aes(ymin=mean-se, ymax=mean+se), width=.1) +
+    scale_fill_manual(values = Colours_dec) +
+    scale_color_manual(values = Colours_dec) +
+    ylab(expression(paste(delta^{15}, "N (\u2030)")))+
+    geom_point(size=3) + 
+    scale_y_continuous(limits = c(1.25,3.5), ) +
+    theme_bw()
+
+
+# %N 
+
+View(Dec2020N)
+
+Dec2020N <- DecSI.plotting %>% group_by(Site) %>%
+  summarise(mean = mean(N_., na.rm = TRUE),
+            sd = sd(N_., na.rm = TRUE),
+            n = sum(!is.na(N_.)),
+            se = sd/sqrt(n))
+
+
+ggplot(Dec2020N, aes(x=Site, y=mean, colour=Site, group=Site)) + 
+    geom_errorbar(aes(ymin=mean-se, ymax=mean+se), width=.1) +
+    scale_fill_manual(values = Colours_dec) +
+    scale_color_manual(values = Colours_dec) +
+    ylab(expression(paste("N %"))) +
+    geom_point(size=3) + 
+    scale_y_continuous(limits = c(1.5,3.5), ) +
+    theme_bw()
+
+# C13
+
+Dec2020C13 <- DecSI.plotting %>% group_by(Site) %>%
+  summarise(mean = mean(C13, na.rm = TRUE),
+            sd = sd(C13, na.rm = TRUE),
+            n = sum(!is.na(C13)),
+            se = sd/sqrt(n))
+
+
+ggplot(Dec2020C13, aes(x=Site, y=mean, colour=Site, group=Site)) + 
+    geom_errorbar(aes(ymin=mean-se, ymax=mean+se), width=.1) +
+    scale_fill_manual(values = Colours_dec) +
+    scale_color_manual(values = Colours_dec) +
+    ylab(expression(paste(delta^{13}, "C (\u2030)")))+
+    geom_point(size=3) + 
+    scale_y_continuous(limits = c(-17,-13), ) +
+    theme_bw()
+
+# C:N 
+
+Dec2020CNratio <- DecSI.plotting %>% group_by(Site) %>%
+  summarise(mean = mean(CNratio, na.rm = TRUE),
+            sd = sd(CNratio, na.rm = TRUE),
+            n = sum(!is.na(CNratio)),
+            se = sd/sqrt(n))
+
+
+p <- ggplot(Dec2020CNratio, aes(x=Site, y=mean, colour=Site, group=Site)) + 
+    geom_errorbar(aes(ymin=mean-se, ymax=mean+se), width=.1) +
+    scale_fill_manual(values = Colours_dec) +
+    scale_color_manual(values = Colours_dec) +
+    ylab("C:N (ug)") +
+    geom_point(size=3) + 
+    scale_y_continuous(limits = c(11,18), ) +
+    theme_bw()
+
+```
+
+# April 
+
+```{r}
+str(AprilSI)
+
+AprilSI$Site <- factor(AprilSI$Site, levels = c("Coord","Cem","SB","EB"))
+
+Colours_April <-c("#008000","#4D828F","#AF1A11","#5D2D89")
+
+View(April2020N15)
+
+# N15
+
+April2020N15 <- AprilSI %>% group_by(Site) %>%
+  summarise(mean = mean(N15, na.rm = TRUE),
+            sd = sd(N15, na.rm = TRUE),
+            n = sum(!is.na(N15)),
+            se = sd/sqrt(n))
+
+ggplot(April2020N15, aes(x=Site, y=mean, colour=Site, group=Site)) + 
+    geom_errorbar(aes(ymin=mean-se, ymax=mean+se), width=.1) +
+    scale_fill_manual(values = Colours_dec) +
+    scale_color_manual(values = Colours_dec) +
+    ylab(expression(paste(delta^{15}, "N (\u2030)")))+
+    geom_point(size=3) + 
+    scale_y_continuous(limits = c(1.25,3.5), ) +
+    theme_bw()
+
+
+# %N 
+
+April2020N <- AprilSI %>% group_by(Site) %>%
+  summarise(mean = mean(N_., na.rm = TRUE),
+            sd = sd(N_., na.rm = TRUE),
+            n = sum(!is.na(N_.)),
+            se = sd/sqrt(n))
+
+View(April2020N)
+ggplot(April2020N, aes(x=Site, y=mean, colour=Site, group=Site)) + 
+    geom_errorbar(aes(ymin=mean-se, ymax=mean+se), width=.1) +
+    scale_fill_manual(values = Colours_dec) +
+    scale_color_manual(values = Colours_dec) +
+    ylab(expression(paste("N %"))) +
+    geom_point(size=3) + 
+    scale_y_continuous(limits = c(1.5,3.5), ) +
+    theme_bw()
+
+# C13
+
+April2020C13 <- AprilSI %>% group_by(Site) %>%
+  summarise(mean = mean(C13, na.rm = TRUE),
+            sd = sd(C13, na.rm = TRUE),
+            n = sum(!is.na(C13)),
+            se = sd/sqrt(n))
+
+
+ggplot(April2020C13, aes(x=Site, y=mean, colour=Site, group=Site)) + 
+    geom_errorbar(aes(ymin=mean-se, ymax=mean+se), width=.1) +
+    scale_fill_manual(values = Colours_dec) +
+    scale_color_manual(values = Colours_dec) +
+    ylab(expression(paste(delta^{13}, "C (\u2030)")))+
+    geom_point(size=3) + 
+    scale_y_continuous(limits = c(-17,-13), ) +
+    theme_bw()
+
+# C:N
+
+April2021CNratio <- AprilSI %>% group_by(Site) %>%
+  summarise(mean = mean(CNratio, na.rm = TRUE),
+            sd = sd(CNratio, na.rm = TRUE),
+            n = sum(!is.na(CNratio)),
+            se = sd/sqrt(n))
+
+
+p <- ggplot(April2021CNratio, aes(x=Site, y=mean, colour=Site, group=Site)) + 
+    geom_errorbar(aes(ymin=mean-se, ymax=mean+se), width=.1) +
+    scale_fill_manual(values = Colours_dec) +
+    scale_color_manual(values = Colours_dec) +
+    ylab("C:N (ug)") +
+    geom_point(size=3) + 
+    scale_y_continuous(limits = c(11,18), ) +
+    theme_bw()
+
+
+```
+
+# April within lagoon 
+
+
+```{r}
+
+#"#008000","#4D828F",
+Colours_all <- c("#EBB261","#E47250","#DF1130","#AF1A11","#5A4A6F", "#9D5A6C")
+
+str(AprilSI.lagoon.sites)
+
+# Filter out Coord, Cemetery, SB5
+
+out <- c("Coord","Cemetery","SB5")
+
+test <- AprilSI.lagoon.sites %>% slice(13:48)
+
+test$Actual_ID <- factor(test$Actual_ID, levels = c("SB4","SB3","SB1","EB3","EB2","EB1"))
+
+# N15
+
+Ap2020N15 <- test %>% group_by(Actual_ID) %>%
+  summarise(mean = mean(N15, na.rm = TRUE),
+            sd = sd(N15, na.rm = TRUE),
+            n = sum(!is.na(N15)),
+            se = sd/sqrt(n))
+
+# Npercent
+
+Ap2020Npercent <- test %>% group_by(Actual_ID) %>%
+  summarise(mean = mean(N_., na.rm = TRUE),
+            sd = sd(N_., na.rm = TRUE),
+            n = sum(!is.na(N_.)),
+            se = sd/sqrt(n))
+
+# C13 
+
+Ap2020C13 <- test %>% group_by(Actual_ID) %>%
+  summarise(mean = mean(C13, na.rm = TRUE),
+            sd = sd(C13, na.rm = TRUE),
+            n = sum(!is.na(C13)),
+            se = sd/sqrt(n))
+
+
+ggplot(Ap2020N15, aes(x=Actual_ID, y=mean, colour=Actual_ID, group=Actual_ID)) + 
+    geom_errorbar(aes(ymin=mean-se, ymax=mean+se), width=.1) +
+    scale_fill_manual(values =Colours_all) +
+    scale_color_manual(values =Colours_all) +
+    ylab(expression(paste(delta^{15}, "N (\u2030)")))+
+    geom_point(size=3) + 
+    scale_y_continuous(limits = c(1.25,3.5), ) +
+    theme_bw()
+
+View(Ap2020Npercent)
+ggplot(Ap2020Npercent, aes(x=Actual_ID, y=mean, colour=Actual_ID, group=Actual_ID)) + 
+    geom_errorbar(aes(ymin=mean-se, ymax=mean+se), width=.1) +
+    scale_fill_manual(values =Colours_all) +
+    scale_color_manual(values =Colours_all) +
+    ylab(lab = "N %")+
+    geom_point(size=3) + 
+    scale_y_continuous(limits = c(1.5,3.5)) +
+    theme_bw()
+
+
+ggplot(Ap2020C13, aes(x=Actual_ID, y=mean, colour=Actual_ID, group=Actual_ID)) + 
+    geom_errorbar(aes(ymin=mean-se, ymax=mean+se), width=.1) +
+    scale_fill_manual(values =Colours_all) +
+    scale_color_manual(values =Colours_all) +
+    ylab(expression(paste(delta^{13}, "C (\u2030)")))+
+    geom_point(size=3) + 
+    scale_y_continuous(limits = c(-18,-13), ) +
+    theme_bw()
+
+
+
+
+```
+
+

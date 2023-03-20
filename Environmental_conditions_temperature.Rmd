@@ -12,10 +12,8 @@ output: html_notebook
 ```{r}
 library(dplyr)
 library(ggplot2)
-##Load required packages
 library(lubridate)
 library(plyr)
-library(dplyr)
 library(lattice)
 library(openair)
 ```

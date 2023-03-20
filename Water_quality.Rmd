@@ -1,0 +1,242 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+# --------------------------
+# NFI_Water_quality_analysis
+# --------------------------
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(tidyverse)
+library(lubridate)
+
+
+wq <- read.csv("Water_quality_data.csv")
+
+str(wq)
+
+# as.date 
+wq$Date <- dmy(wq$Date)
+
+# Site as a factor 
+wq$Site <- as.factor(wq$Site)
+
+```
+
+# Plotting 
+
+```{r}
+
+# Pivot longer so that we can plot nox and nh4 on the same graph 
+
+wq.long <- pivot_longer(wq, cols = c(5:6), values_to = "Measurement")
+
+wq.plotting <- wq.long %>% group_by(Date, Site, name) %>%
+  summarise(mean = mean(Measurement, na.rm = TRUE),
+            sd = sd(Measurement, na.rm = TRUE),
+            n = sum(!is.na(Measurement)),
+            se = sd/sqrt(n))
+
+ggplot(wq.plotting, aes(x=Date, y=mean,fill=Site)) + 
+  geom_col(position = "dodge") + 
+    geom_errorbar(aes(ymin=mean-se, ymax=mean+se), width=.1, position = position_dodge(width = 0.9)) +
+    #scale_fill_manual(values = Colours_dec) +
+   # scale_color_manual(values = Colours_dec) +
+    theme_bw() +
+  facet_wrap(~name)
+
+```
+
+# Calculate times higher over ANZECC guidelines 
+
+```{r}
+
+# 2/09/20 
+# NH4 
+# EB
+84.56/10
+
+# SB
+148.2/10
+
+# NOx 
+# EB 
+59.1/50
+
+# SB
+55/50
+
+# 15/11/20 
+# NH4 
+# EB
+67.7/10
+
+# SB
+59.1/10
+
+# NOx 
+
+# EB
+107/50
+
+# SB
+67/50
+
+# 10/12/20 
+# NOx
+# EB
+54.7/50
+
+# SB
+64.67/50
+
+# 9/04/21
+# NH4 
+# EB
+24.5/10
+
+# SB
+16.2/10
+
+```
+
+
+# Filter out each sampling date and make seperate graphs 
+
+```{r}
+
+# 2020-09-02
+
+wq.plottingsept <- wq.plotting %>% filter(Date == as.Date("2020-09-02"))
+
+wq.plottingsept$Site <- factor(wq.plottingsept$Site, levels = c("SB","EB"))
+
+str(wq.plottingsept)
+
+ggplot(wq.plottingsept, aes(x=Site, y=mean, fill=name)) + 
+  geom_point(position_dodge(0.3)) + 
+    geom_errorbar(aes(ymin=mean-se, ymax=mean+se), width=.1, position = position_dodge(width = 0.9)) +
+  scale_y_continuous(limits = c(0,225)) +
+    #scale_fill_manual(values = Colours_dec) +
+   # scale_color_manual(values = Colours_dec) +
+    theme_bw() 
+
+sept <- ggplot(wq.plottingsept, aes(Site, mean)) +
+  geom_errorbar(
+    aes(ymin = mean-se, ymax = mean+se, color = name),
+    position = position_dodge(0.3), width = 0.1
+    )+
+    scale_y_continuous(limits = c(0,225)) +
+    geom_point(aes(color = name), position = position_dodge(0.3)) +
+    scale_color_manual(values = c("#00AFBB", "#E7B800")) +
+    theme_bw() 
+
+sept
+
+
+```
+
+
+```{r}
+
+# 2020-11-15
+
+wq.plottingnov <- wq.plotting %>% filter(Date == as.Date("2020-11-15"))
+
+wq.plottingnov$Site <- factor(wq.plottingnov$Site, levels = c("SB","EB"))
+
+str(wq.plottingnov)
+
+nov <- ggplot(wq.plottingnov, aes(Site, mean)) +
+  geom_errorbar(
+    aes(ymin = mean-se, ymax = mean+se, color = name),
+    position = position_dodge(0.3), width = 0.1
+    )+
+    scale_y_continuous(limits = c(0,225)) +
+    geom_point(aes(color = name), position = position_dodge(0.3)) +
+    scale_color_manual(values = c("#00AFBB", "#E7B800")) +
+    theme_bw() 
+
+```
+
+```{r}
+
+# 2020-12-10
+
+#wq.plottinga <- slice(wq.plotting,-(15:16))
+
+
+wq.plottingdec <- wq.plotting %>% filter(Date == as.Date("2020-12-10")) 
+
+str(wq.plottingdec)
+View(wq.plottingdec)
+wq.plottingdec <- as.data.frame(wq.plottingdec)
+
+wq.plottingdec$Site <- factor(wq.plottingdec$Site, levels = c("CB","SB","EB","Stream"))
+
+
+str(wq.plottingdec)
+#a <- wq.plottingdec[!(wq.plottingdec$Site=="Stream")]
+
+
+str(wq.plottingdec)
+
+dec <- ggplot(wq.plottingdec, aes(Site, mean)) +
+  geom_errorbar(
+    aes(ymin = mean-se, ymax = mean+se, color = name),
+    position = position_dodge(0.3), width = 0.1
+    )+
+    scale_y_continuous(limits = c(0,225)) +
+    geom_point(aes(color = name), position = position_dodge(0.3)) +
+    scale_color_manual(values = c("#00AFBB", "#E7B800")) +
+    theme_bw() 
+
+dec
+
+```
+
+
+```{r}
+
+# 2021-04-09
+
+wq.plottingapril <- wq.plotting %>% filter(Date == as.Date("2021-04-09"))
+
+
+
+wq.plottingapril$Site <- factor(wq.plottingapril$Site, levels = c("North Side","CB","SB","EB"))
+
+str(wq.plottingapril )
+
+april <- ggplot(wq.plottingapril, aes(Site, mean)) +
+  geom_errorbar(
+    aes(ymin = mean-se, ymax = mean+se, color = name),
+    position = position_dodge(0.3), width = 0.1
+    )+
+    scale_y_continuous(limits = c(0,225)) +
+    geom_point(aes(color = name), position = position_dodge(0.3)) +
+    scale_color_manual(values = c("#00AFBB", "#E7B800")) +
+    theme_bw() 
+
+april
+
+```
+
+
+```{r}
+
+# 2021-04-09
+
+wq.plottingapril <- wq.plotting %>% filter(Date == as.Date("2021-04-09"))
+
+
+
+wq.plottingapril$Site <- factor(wq.plottingapril$Site, levels = c("North side","CB","SB","EB"))
+
+str(wq.plottingapril )
+
+
+```
